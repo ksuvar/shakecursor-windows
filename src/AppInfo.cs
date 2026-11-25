@@ -13,14 +13,14 @@ using System.Windows.Forms;
 [assembly: AssemblyProduct("Shake Cursor")]
 [assembly: AssemblyCompany("ksuvar")]
 [assembly: AssemblyCopyright("GPL-2.0-or-later. Based on KWin's shakecursor by Vlad Zahorodnii.")]
-[assembly: AssemblyVersion("1.1.1.0")]
-[assembly: AssemblyFileVersion("1.1.1.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace ShakeCursor
 {
     static class AppInfo
     {
-        public const string Version = "1.1.1";
+        public const string Version = "1.2.0";
         public const string Author = "ksuvar";
         public const string Url = "https://github.com/ksuvar/shakecursor-windows";
 

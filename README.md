@@ -45,10 +45,15 @@ Click the icon to open the settings, or right-click it for the menu:
 | Settings... | Shake strength, size, growth, largest size, time window, pointers, autostart |
 | Mouse pointers | Switch between **KDE Breeze**, **Windows default**, and **My previous pointers** |
 | Start with Windows | Toggles autostart |
+| Check for updates... | Shows your version and opens the latest release on GitHub. Running the new exe updates it and keeps your settings and pointers |
 | About / GitHub | Opens this page |
+| Please give it a ★ on GitHub | Opens this page, if you'd like to star it |
 | Uninstall... | Removes the app and puts your previous pointers back |
 
 Opening Shake Cursor from the Start menu while it's already running opens its settings.
+
+Shake Cursor never updates itself and never connects to the internet. **Check for updates...** just opens the
+releases page in your browser.
 
 ## Works with any pointer set
 

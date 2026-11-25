@@ -43,6 +43,8 @@ namespace ShakeCursor
 
             m_autostart = new ToolStripMenuItem("Start with Windows", null, delegate { Installer.Autostart = !Installer.Autostart; });
             var about = new ToolStripMenuItem("About / GitHub", null, delegate { OpenUrl(AppInfo.Url); });
+            var update = new ToolStripMenuItem("Check for updates...", null, delegate { CheckForUpdates(); });
+            var star = new ToolStripMenuItem("Enjoying Shake Cursor? Please give it a ★ on GitHub", null, delegate { OpenUrl(AppInfo.Url); });
             m_uninstall = new ToolStripMenuItem("Uninstall...", null, delegate { Uninstall(); });
             var quit = new ToolStripMenuItem("Quit", null, delegate { ExitThread(); });
 
@@ -52,7 +54,7 @@ namespace ShakeCursor
                 header, new ToolStripSeparator(),
                 m_enabled, settings, style, m_autostart,
                 new ToolStripSeparator(),
-                about, m_uninstall, quit,
+                update, about, star, m_uninstall, quit,
             });
             m_menu.Opening += delegate { RefreshMenu(); };
 
@@ -162,6 +164,14 @@ namespace ShakeCursor
         {
             // Hand over to a fresh process so this one can exit and the folder can be deleted.
             Process.Start(new ProcessStartInfo(Application.ExecutablePath, "--uninstall") { UseShellExecute = false });
+        }
+
+        // The app itself never goes online: the browser shows the newest release only when the user asks.
+        void CheckForUpdates()
+        {
+            if (MessageBox.Show("You have Shake Cursor " + AppInfo.Version + ".\n\nOpen the latest release on GitHub? If it's newer, download ShakeCursor.exe, run it and click Install: your settings and pointers are kept.",
+                    "Check for updates", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK)
+                OpenUrl(AppInfo.Url + "/releases/latest");
         }
 
         static void OpenUrl(string url)
