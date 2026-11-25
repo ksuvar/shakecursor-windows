@@ -65,6 +65,12 @@ namespace ShakeCursor
         [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string name);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr LoadLibraryEx(string file, IntPtr reserved, uint flags);
+        [DllImport("kernel32.dll")] public static extern IntPtr FindResource(IntPtr hModule, IntPtr name, IntPtr type);
+        [DllImport("kernel32.dll")] public static extern IntPtr LoadResource(IntPtr hModule, IntPtr hResInfo);
+        [DllImport("kernel32.dll")] public static extern IntPtr LockResource(IntPtr hResData);
+        [DllImport("kernel32.dll")] public static extern int SizeofResource(IntPtr hModule, IntPtr hResInfo);
+        [DllImport("user32.dll")]
+        public static extern IntPtr CreateIconFromResourceEx(byte[] bits, int size, bool icon, int version, int cx, int cy, uint flags);
 
         [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
         [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);

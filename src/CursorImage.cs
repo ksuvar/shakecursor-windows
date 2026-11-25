@@ -17,15 +17,95 @@ namespace ShakeCursor
         public Bitmap Bitmap;
         public PointF Hotspot; // in Bitmap pixels
 
+        // Animated cursors only: the image of each step (a frame may repeat) and how long it shows.
+        public CursorImage[] Frames;
+        public int[] StepMs;
+
         public const int PrefetchSize = 256; // largest size a .cur file can hold
 
-        /// <summary>Loads a .cur/.ani file at high resolution (first frame for animated cursors).</summary>
+        /// <summary>Loads a .cur/.ani file at high resolution, with every frame for animated cursors.</summary>
         public static CursorImage FromFile(string path)
         {
             IntPtr h = Native.LoadImage(IntPtr.Zero, path, Native.IMAGE_CURSOR, PrefetchSize, PrefetchSize, Native.LR_LOADFROMFILE);
             if (h == IntPtr.Zero) return null;
-            try { return FromHandle(h); }
+            CursorImage img;
+            try { img = FromHandle(h); }
             finally { Native.DestroyCursor(h); }
+            if (img != null)
+                try { img.LoadFrames(System.IO.File.ReadAllBytes(path)); } catch { /* fall back to the still first frame */ }
+            return img;
+        }
+
+        /// <summary>Reads the frames of an .ani (RIFF "ACON") file; does nothing for other data.</summary>
+        void LoadFrames(byte[] b)
+        {
+            if (b.Length < 12 || Tag(b, 0) != "RIFF" || Tag(b, 8) != "ACON") return;
+            var icons = new System.Collections.Generic.List<CursorImage>();
+            int[] rate = null, seq = null;
+            int steps = 0, jiffies = 10;
+            for (int pos = 12; pos + 8 <= b.Length;)
+            {
+                string id = Tag(b, pos);
+                int len = BitConverter.ToInt32(b, pos + 4), data = pos + 8;
+                if (len < 0 || data + len > b.Length) break;
+                if (id == "anih" && len >= 36) { steps = BitConverter.ToInt32(b, data + 8); jiffies = BitConverter.ToInt32(b, data + 28); }
+                else if (id == "rate") rate = Ints(b, data, len / 4);
+                else if (id == "seq ") seq = Ints(b, data, len / 4);
+                else if (id == "LIST" && len >= 4 && Tag(b, data) == "fram")
+                    for (int p = data + 4; p + 8 <= data + len;)
+                    {
+                        int l = BitConverter.ToInt32(b, p + 4);
+                        if (l < 0 || p + 8 + l > data + len) break;
+                        if (Tag(b, p) == "icon") icons.Add(FromIconFile(b, p + 8));
+                        p += 8 + l + (l & 1);
+                    }
+                pos = data + len + (len & 1); // chunks are word aligned
+            }
+            if (icons.Count < 2 || icons.Contains(null)) { foreach (CursorImage i in icons) if (i != null) i.Dispose(); return; }
+
+            if (steps <= 0) steps = seq != null ? seq.Length : icons.Count;
+            Frames = new CursorImage[steps];
+            StepMs = new int[steps];
+            for (int s = 0; s < steps; s++)
+            {
+                int f = seq != null && s < seq.Length ? seq[s] : s;
+                Frames[s] = icons[Math.Max(0, Math.Min(icons.Count - 1, f))];
+                int j = rate != null && s < rate.Length ? rate[s] : jiffies;
+                StepMs[s] = Math.Max(16, j * 1000 / 60); // rates are in jiffies (1/60 s)
+            }
+        }
+
+        /// <summary>Largest image of a .cur/.ico file held in <paramref name="b"/> at <paramref name="at"/>.</summary>
+        static CursorImage FromIconFile(byte[] b, int at)
+        {
+            int count = BitConverter.ToUInt16(b, at + 4), best = -1, bestW = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int w = b[at + 6 + i * 16]; if (w == 0) w = 256;
+                if (w > bestW) { bestW = w; best = at + 6 + i * 16; }
+            }
+            if (best < 0) return null;
+            bool isCursor = BitConverter.ToUInt16(b, at + 2) == 2;
+            int size = BitConverter.ToInt32(b, best + 8), offset = at + BitConverter.ToInt32(b, best + 12);
+            int h = b[best + 1]; if (h == 0) h = 256;
+
+            // Cursor resource data = hotspot (two WORDs) + the image (DIB or PNG).
+            var res = new byte[4 + size];
+            if (isCursor) Array.Copy(b, best + 4, res, 0, 4);
+            Array.Copy(b, offset, res, 4, size);
+            IntPtr hc = Native.CreateIconFromResourceEx(res, res.Length, false, 0x00030000, bestW, h, 0);
+            if (hc == IntPtr.Zero) return null;
+            try { return FromHandle(hc); }
+            finally { Native.DestroyCursor(hc); }
+        }
+
+        static string Tag(byte[] b, int at) { return System.Text.Encoding.ASCII.GetString(b, at, 4); }
+
+        static int[] Ints(byte[] b, int at, int n)
+        {
+            var r = new int[n];
+            for (int i = 0; i < n; i++) r[i] = BitConverter.ToInt32(b, at + i * 4);
+            return r;
         }
 
         // OCR_* id -> cursor resource in user32.dll (what Windows shows when a scheme entry is empty).
@@ -47,8 +127,19 @@ namespace ShakeCursor
             if (s_user32 == IntPtr.Zero) s_user32 = Native.LoadLibraryEx("user32.dll", IntPtr.Zero, 2 /*AS_DATAFILE*/);
             IntPtr h = Native.LoadImage(s_user32, new IntPtr(res), Native.IMAGE_CURSOR, PrefetchSize, PrefetchSize, 0);
             if (h == IntPtr.Zero) return null;
-            try { return FromHandle(h); }
+            CursorImage img;
+            try { img = FromHandle(h); }
             finally { Native.DestroyCursor(h); }
+
+            // Busy shapes are RT_ANICURSOR (21) resources holding the same RIFF data as an .ani file.
+            IntPtr info = Native.FindResource(s_user32, new IntPtr(res), new IntPtr(21));
+            if (img != null && info != IntPtr.Zero)
+            {
+                var bytes = new byte[Native.SizeofResource(s_user32, info)];
+                Marshal.Copy(Native.LockResource(Native.LoadResource(s_user32, info)), bytes, 0, bytes.Length);
+                try { img.LoadFrames(bytes); } catch { }
+            }
+            return img;
         }
 
         /// <summary>Copies the pixels of any cursor handle (the handle is not destroyed).</summary>
@@ -171,6 +262,8 @@ namespace ShakeCursor
         public void Dispose()
         {
             if (Bitmap != null) { Bitmap.Dispose(); Bitmap = null; }
+            if (Frames != null) foreach (CursorImage f in Frames) f.Dispose(); // repeats are harmless: Dispose is idempotent
+            Frames = null;
         }
     }
 }

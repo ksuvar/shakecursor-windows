@@ -24,6 +24,9 @@ namespace ShakeCursor
         readonly Timer m_deflateTimer = new Timer();
         readonly Timer m_animationTimer = new Timer();
         readonly Timer m_shapeTimer = new Timer();
+        readonly Timer m_frameTimer = new Timer(); // plays animated cursors (busy, working in background...)
+        CursorImage m_shownImage;
+        int m_step;
         readonly Stopwatch m_animationClock = new Stopwatch();
         readonly Native.LowLevelMouseProc m_hookProc;
         readonly double m_dpiScale;
@@ -50,6 +53,7 @@ namespace ShakeCursor
             m_animationTimer.Tick += delegate { StepAnimation(); };
             m_shapeTimer.Interval = 50;
             m_shapeTimer.Tick += delegate { FollowShape(false); };
+            m_frameTimer.Tick += delegate { NextFrame(); };
 
             Reconfigure(config);
             m_cursors.Refresh();
@@ -67,6 +71,7 @@ namespace ShakeCursor
             m_animationTimer.Stop();
             m_deflateTimer.Stop();
             m_shapeTimer.Stop();
+            m_frameTimer.Stop();
             Magnify(1.0);
             m_cursors.Dispose();
         }
@@ -189,6 +194,8 @@ namespace ShakeCursor
                 if (m_cursorItem != null)
                 {
                     m_shapeTimer.Stop();
+                    m_frameTimer.Stop();
+                    m_shownImage = null;
                     m_cursorItem.Close();
                     m_cursorItem.Dispose();
                     m_cursorItem = null;
@@ -232,12 +239,36 @@ namespace ShakeCursor
                 // The app under the pointer hid it (video player, game, typing...).
                 m_cursorItem.SetHidden(true);
                 m_shownHandle = IntPtr.Zero;
+                m_shownImage = null;
+                m_frameTimer.Stop();
                 return;
             }
 
             if (!sizeChanged && ci.hCursor == m_shownHandle) return;
             m_shownHandle = ci.hCursor;
-            m_cursorItem.Render(m_cursors.Lookup(ci.hCursor), (float)(m_baseSize * m_currentMagnification), m_x, m_y);
+            CursorImage img = m_cursors.Lookup(ci.hCursor);
+            if (img != m_shownImage) { m_shownImage = img; m_step = 0; m_frameTimer.Stop(); }
+            RenderFrame();
+        }
+
+        void RenderFrame()
+        {
+            CursorImage img = m_shownImage;
+            if (img != null && img.Frames != null)
+            {
+                if (!m_frameTimer.Enabled) { m_frameTimer.Interval = img.StepMs[m_step]; m_frameTimer.Start(); }
+                img = img.Frames[m_step];
+            }
+            else m_frameTimer.Stop();
+            m_cursorItem.Render(img, (float)(m_baseSize * m_currentMagnification), m_x, m_y);
+        }
+
+        void NextFrame()
+        {
+            m_frameTimer.Stop();
+            if (m_cursorItem == null || m_shownImage == null || m_shownImage.Frames == null) return;
+            m_step = (m_step + 1) % m_shownImage.Frames.Length;
+            RenderFrame();
         }
 
         /// <summary>Size of the pointer as Windows currently draws it (honours the "pointer size" setting).</summary>
